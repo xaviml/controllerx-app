@@ -8,7 +8,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG BUILD_VERSION
 ARG BUILD_ARCH
 # Checksum of controllerx.zip for the ControllerX version above
-ARG CONTROLLERX_SHA256="cdb490c6372489b6b6e240166498a396fd3a65a2f0364800db7ec1484609f57c"
+ARG CONTROLLERX_SHA256="a9c9cc828fa107ae0f483e8efc1803f22e30abb18709cbc26c7f565d4d10c705"
 
 # Bundle ControllerX and drop the community app's initial configuration
 # (hello world app and dashboard), the init-controllerx service creates ours.

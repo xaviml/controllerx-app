@@ -2,7 +2,7 @@
 name: ControllerX
 # Version is the bundled ControllerX version, "-<n>" for app-only releases
 # (ignored when downloading ControllerX). Set by the release workflows.
-version: 5.2.3
+version: 5.2.4
 slug: controllerx
 description: >-
   Controller-based automations for your home devices, running on its own
