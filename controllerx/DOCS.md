@@ -50,7 +50,9 @@ only makes sure the Home Assistant token and the web interface address are set.
 To use the z2m integration with `listen_to: mqtt`, enable the MQTT plugin as
 explained in [Enable MQTT plugin](https://xaviml.github.io/controllerx/others/enable-mqtt-plugin).
 With the Mosquitto broker app, use `core-mosquitto` as `client_host`, and keep
-the password in `secrets.yaml`:
+the password in `secrets.yaml`. Set a `client_id` that no other MQTT client
+uses: without it, AppDaemon uses `appdaemon_mqtt_client`, the same as the
+AppDaemon app, and the broker keeps disconnecting one of the two.
 
 ```yaml
 # appdaemon.yaml
@@ -59,6 +61,7 @@ appdaemon:
     MQTT:
       type: mqtt
       namespace: mqtt
+      client_id: controllerx
       client_host: core-mosquitto
       client_user: my_user
       client_password: !secret mqtt_password

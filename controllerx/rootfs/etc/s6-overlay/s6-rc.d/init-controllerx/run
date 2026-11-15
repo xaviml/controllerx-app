@@ -65,10 +65,12 @@ appdaemon:
       token: !env_var SUPERVISOR_TOKEN
     # Needed for the z2m integration with "listen_to: mqtt", see
     # https://xaviml.github.io/controllerx/others/enable-mqtt-plugin
-    # Store the password in secrets.yaml, next to this file.
+    # Store the password in secrets.yaml, next to this file. Keep client_id
+    # unique, so it doesn't clash with another AppDaemon on the same broker.
     # MQTT:
     #   type: mqtt
     #   namespace: mqtt
+    #   client_id: controllerx
     #   client_host: core-mosquitto
     #   client_user: <user>
     #   client_password: !secret mqtt_password
