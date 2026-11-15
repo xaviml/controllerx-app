@@ -1,0 +1,39 @@
+---
+name: Build
+
+# Checks that the images build. Publishing is done by the release workflows.
+# yamllint disable-line rule:truthy
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            os: ubuntu-24.04
+          - arch: aarch64
+            os: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Read version
+        id: version
+        run: |
+          echo "version=$(sed -n 's/^version: *//p' controllerx/config.yaml)" >> "$GITHUB_OUTPUT"
+      - uses: home-assistant/builder/actions/build-image@2026.09.0
+        with:
+          arch: ${{ matrix.arch }}
+          context: controllerx
+          image: ghcr.io/xaviml/controllerx-app/${{ matrix.arch }}
+          version: ${{ steps.version.outputs.version }}
+          push: "false"
+          cosign: "false"

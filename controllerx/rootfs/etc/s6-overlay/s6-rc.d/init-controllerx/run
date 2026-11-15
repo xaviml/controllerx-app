@@ -1,0 +1,103 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Home Assistant App: ControllerX
+# Prepares the AppDaemon configuration folder. Runs before init-appdaemon
+# (from the community AppDaemon base image), which then only ensures the
+# token and HTTP URL in appdaemon.yaml.
+# ==============================================================================
+readonly CONFIG_DIR="/config"
+readonly APPS_DIR="/config/apps"
+readonly CONTROLLERX_SRC="/opt/controllerx"
+
+# ------------------------------------------------------------------------------
+# Creates the initial appdaemon.yaml, using the Home Assistant location and
+# time zone, since AppDaemon requires them.
+# ------------------------------------------------------------------------------
+create_appdaemon_config() {
+    local ha_config=""
+    local latitude=0
+    local longitude=0
+    local elevation=0
+    local time_zone="${TZ:-UTC}"
+    local -i waited=0
+
+    bashio::log.info "Creating initial AppDaemon configuration..."
+
+    while [[ ${waited} -lt 120 ]]; do
+        ha_config=$(\
+            curl -sf -m 10 \
+                -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+                "http://supervisor/core/api/config" \
+        ) && break
+        ha_config=""
+        if [[ ${waited} -eq 0 ]]; then
+            bashio::log.info "Waiting for Home Assistant to get its location..."
+        fi
+        sleep 5
+        waited=$((waited + 5))
+    done
+
+    if [[ -n "${ha_config}" ]]; then
+        latitude=$(jq -r '.latitude | numbers' <<< "${ha_config}") || latitude=0
+        longitude=$(jq -r '.longitude | numbers' <<< "${ha_config}") || longitude=0
+        elevation=$(jq -r '.elevation | numbers | round' <<< "${ha_config}") || elevation=0
+        time_zone=$(jq -r '.time_zone | strings' <<< "${ha_config}") || time_zone="${TZ:-UTC}"
+    else
+        bashio::log.warning \
+            "Could not get the location from Home Assistant," \
+            "please review ${CONFIG_DIR}/appdaemon.yaml"
+    fi
+
+    cat > "${CONFIG_DIR}/appdaemon.yaml" <<EOF
+---
+# AppDaemon configuration for the ControllerX app.
+# Restart the app after changing this file.
+# Documentation: https://appdaemon.readthedocs.io/en/latest/CONFIGURE.html
+appdaemon:
+  latitude: ${latitude:-0}
+  longitude: ${longitude:-0}
+  elevation: ${elevation:-0}
+  time_zone: "${time_zone:-UTC}"
+  plugins:
+    HASS:
+      type: hass
+      token: !env_var SUPERVISOR_TOKEN
+    # Needed for the z2m integration with "listen_to: mqtt", see
+    # https://xaviml.github.io/controllerx/others/enable-mqtt-plugin
+    # Store the password in secrets.yaml, next to this file.
+    # MQTT:
+    #   type: mqtt
+    #   namespace: mqtt
+    #   client_host: core-mosquitto
+    #   client_user: <user>
+    #   client_password: !secret mqtt_password
+http:
+  url: http://0.0.0.0:5050
+admin:
+api:
+EOF
+}
+
+if ! bashio::fs.file_exists "${CONFIG_DIR}/appdaemon.yaml"; then
+    create_appdaemon_config \
+        || bashio::exit.nok "Failed to create initial AppDaemon configuration"
+fi
+
+mkdir -p "${APPS_DIR}" \
+    || bashio::exit.nok "Failed to create ${APPS_DIR}"
+
+# The ControllerX folder is managed by this app, so it is replaced on every
+# start with the bundled version.
+bashio::log.info "Installing ControllerX into ${APPS_DIR}/controllerx..."
+rm -rf "${APPS_DIR}/controllerx" \
+    || bashio::exit.nok "Failed to remove the previous ControllerX"
+cp -R "${CONTROLLERX_SRC}" "${APPS_DIR}/controllerx" \
+    || bashio::exit.nok "Failed to install ControllerX"
+
+# apps.yaml belongs to the user, only create the example if it does not exist
+if ! bashio::fs.file_exists "${APPS_DIR}/apps.yaml"; then
+    bashio::log.info "Creating example ${APPS_DIR}/apps.yaml..."
+    cp /usr/share/controllerx/apps.yaml "${APPS_DIR}/apps.yaml" \
+        || bashio::exit.nok "Failed to create example apps.yaml"
+fi

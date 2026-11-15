@@ -1,0 +1,62 @@
+---
+name: Release ControllerX
+
+# Triggered by the ControllerX CI/CD after a release, or manually.
+# yamllint disable-line rule:truthy
+on:
+  repository_dispatch:
+    types:
+      - controllerx-release
+  workflow_dispatch:
+    inputs:
+      version:
+        description: ControllerX release tag (e.g. v5.2.4)
+        required: true
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release: ${{ steps.release.outputs.release }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Update version, checksum and changelog
+        id: release
+        env:
+          CONTROLLERX_VERSION: ${{ github.event.client_payload.version || inputs.version }}
+        run: .github/scripts/release.sh controllerx "${CONTROLLERX_VERSION}"
+      - name: Push release branch
+        if: steps.release.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): ${VERSION}"
+          git push --force origin "HEAD:refs/heads/release/${VERSION}"
+
+  publish:
+    name: Publish
+    needs: prepare
+    if: needs.prepare.outputs.release == 'true'
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    uses: ./.github/workflows/publish.yaml
+    with:
+      version: ${{ needs.prepare.outputs.version }}

@@ -1,0 +1,13 @@
+---
+configuration:
+  log_level:
+    name: Log level
+    description: >-
+      Controls how verbose the AppDaemon logs are. Use debug to troubleshoot
+      a controller.
+  python_packages:
+    name: Python packages
+    description: >-
+      Extra Python packages to install into AppDaemon on startup.
+network:
+  5050/tcp: AppDaemon web interface (not needed by ControllerX).

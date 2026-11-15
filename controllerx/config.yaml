@@ -1,0 +1,27 @@
+---
+name: ControllerX
+# Version is the bundled ControllerX version, "-<n>" for app-only releases
+# (ignored when downloading ControllerX). Set by the release workflows.
+version: 5.2.3
+slug: controllerx
+description: >-
+  Controller-based automations for your home devices, running on its own
+  AppDaemon instance with ControllerX preinstalled
+url: https://github.com/xaviml/controllerx-app
+arch:
+  - aarch64
+  - amd64
+init: false
+homeassistant_api: true
+ports:
+  5050/tcp: null
+ports_description:
+  5050/tcp: AppDaemon web interface (not needed by ControllerX)
+map:
+  - addon_config:rw
+options:
+  python_packages: []
+schema:
+  log_level: list(trace|debug|info|notice|warning|error|fatal)?
+  python_packages:
+    - str

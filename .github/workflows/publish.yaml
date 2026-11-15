@@ -1,0 +1,74 @@
+---
+name: Publish
+
+# Builds and pushes the images from the release/<version> branch, then
+# fast-forwards main to it, so the version only reaches users once its
+# images exist.
+# yamllint disable-line rule:truthy
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: App version to publish
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            os: ubuntu-24.04
+          - arch: aarch64
+            os: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: release/${{ inputs.version }}
+          persist-credentials: false
+      - uses: home-assistant/builder/actions/build-image@2026.09.0
+        with:
+          arch: ${{ matrix.arch }}
+          context: controllerx
+          image: ghcr.io/xaviml/controllerx-app/${{ matrix.arch }}
+          image-tags: |
+            ${{ inputs.version }}
+            latest
+          version: ${{ inputs.version }}
+          push: "true"
+          skip-existing: ${{ inputs.version }}
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    name: Release ${{ inputs.version }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Fast-forward main, tag and clean up
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          branch="release/${VERSION}"
+          git fetch origin "${branch}"
+          if ! git merge --ff-only "origin/${branch}"; then
+            echo "::error::main changed since the release was prepared, run the release again"
+            exit 1
+          fi
+          git tag "v${VERSION}"
+          git push --atomic origin main "refs/tags/v${VERSION}"
+          git push origin --delete "${branch}"

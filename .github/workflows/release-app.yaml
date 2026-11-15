@@ -1,0 +1,58 @@
+---
+name: Release app
+
+# Releases changes to the app itself (e.g. a base image bump) as X.Y.Z-N,
+# keeping the bundled ControllerX version.
+# yamllint disable-line rule:truthy
+on:
+  workflow_dispatch:
+    inputs:
+      changelog:
+        description: Changelog entry (e.g. "Update AppDaemon base image to 0.19.4.")
+        required: true
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release: ${{ steps.release.outputs.release }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Update version and changelog
+        id: release
+        env:
+          CHANGELOG_ENTRY: ${{ inputs.changelog }}
+        run: .github/scripts/release.sh app "${CHANGELOG_ENTRY}"
+      - name: Push release branch
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): ${VERSION}"
+          git push --force origin "HEAD:refs/heads/release/${VERSION}"
+
+  publish:
+    name: Publish
+    needs: prepare
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    uses: ./.github/workflows/publish.yaml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
