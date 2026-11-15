@@ -8,6 +8,7 @@ description: >-
   Controller-based automations for your home devices, running on its own
   AppDaemon instance with ControllerX preinstalled
 url: https://github.com/xaviml/controllerx-app
+image: ghcr.io/xaviml/controllerx-app/{arch}
 arch:
   - aarch64
   - amd64
