@@ -26,7 +26,8 @@ by hand.
 - **Changes to the app only** (for example, a new base image): after merging
   them, run the **Release app** workflow from the Actions tab with a changelog
   entry. It releases `5.2.3-1`, then `5.2.3-2`, and so on, so Home Assistant
-  offers the update.
+  offers the update. Dependabot checks weekly for a new AppDaemon base
+  image and opens a PR for it.
 
 Both workflows add the changelog entry, then build and push the amd64 and
 aarch64 images to `ghcr.io/xaviml/controllerx-app/<arch>`. Only then do they

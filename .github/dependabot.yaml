@@ -1,0 +1,23 @@
+---
+version: 2
+updates:
+  # Opens a PR when a new AppDaemon base image is released. After merging,
+  # run the "Release app" workflow to publish it.
+  - package-ecosystem: docker
+    directory: /controllerx
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+  # Keeps the actions used by the workflows (e.g. home-assistant/builder)
+  # up to date.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      github-actions:
+        patterns:
+          - "*"
