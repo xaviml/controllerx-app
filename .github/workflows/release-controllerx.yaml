@@ -30,7 +30,7 @@ jobs:
       release: ${{ steps.release.outputs.release }}
       version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
