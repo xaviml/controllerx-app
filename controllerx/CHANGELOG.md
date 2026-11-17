@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.3.0
+
+- Update ControllerX to [v5.3.0](https://github.com/xaviml/controllerx/releases/tag/v5.3.0).
+
 ## 5.2.5
 
 - Update ControllerX to [v5.2.5](https://github.com/xaviml/controllerx/releases/tag/v5.2.5).
