@@ -1,5 +1,6 @@
 ---
-# ControllerX apps. Changes to this file are applied without restarting.
+# ControllerX apps. Changes to this file are applied without restarting,
+# unless "Production mode" is on in the app's Configuration tab.
 #
 # Each app links one controller with one or more devices, for example:
 #

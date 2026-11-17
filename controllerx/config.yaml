@@ -14,15 +14,21 @@ arch:
   - amd64
 init: false
 homeassistant_api: true
-ports:
-  5050/tcp: null
-ports_description:
-  5050/tcp: AppDaemon web interface (not needed by ControllerX)
+services:
+  - mqtt:want
 map:
   - addon_config:rw
 options:
   python_packages: []
+  production_mode: false
+  mqtt_enabled: false
 schema:
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
   python_packages:
     - str
+  production_mode: bool
+  mqtt_enabled: bool
+  mqtt_host: str?
+  mqtt_port: port?
+  mqtt_username: str?
+  mqtt_password: password?

@@ -9,5 +9,28 @@ configuration:
     name: Python packages
     description: >-
       Extra Python packages to install into AppDaemon on startup.
-network:
-  5050/tcp: AppDaemon web interface (not needed by ControllerX).
+  production_mode:
+    name: Production mode
+    description: >-
+      Stops AppDaemon from checking your apps.yaml files for changes every
+      second, to save resources. Changes to them then need an app restart.
+  mqtt_enabled:
+    name: Enable MQTT
+    description: >-
+      Connects AppDaemon to an MQTT broker. Needed by the mqtt and tasmota
+      integrations, z2m with listen_to mqtt and Z2MLightController with mode
+      mqtt. Uses the Mosquitto broker app if no MQTT host is set.
+  mqtt_host:
+    name: MQTT host
+    description: >-
+      Host of the MQTT broker, without the port. Leave it empty to use the
+      Mosquitto broker app.
+  mqtt_port:
+    name: MQTT port
+    description: Port of the MQTT broker. Defaults to 1883.
+  mqtt_username:
+    name: MQTT username
+    description: User to connect to the MQTT broker.
+  mqtt_password:
+    name: MQTT password
+    description: Password to connect to the MQTT broker.

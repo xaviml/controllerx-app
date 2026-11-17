@@ -2,29 +2,76 @@
 # shellcheck shell=bash
 # ==============================================================================
 # Home Assistant App: ControllerX
-# Prepares the AppDaemon configuration folder. Runs before init-appdaemon
-# (from the community AppDaemon base image), which then only ensures the
-# token and HTTP URL in appdaemon.yaml.
+# Prepares the AppDaemon configuration folder. Runs before init-appdaemon.
+#
+# appdaemon.yaml is generated on every start from the app options and the
+# Home Assistant configuration, with only what ControllerX needs. It's kept in
+# the app's private storage, out of the users' reach, so the settings that
+# save resources can't be changed or lost. AppDaemon is started with it as its
+# configuration folder (see the Dockerfile).
 # ==============================================================================
-readonly CONFIG_DIR="/config"
 readonly APPS_DIR="/config/apps"
+readonly SECRETS_FILE="/config/secrets.yaml"
+readonly APPDAEMON_DIR="/data/appdaemon"
+readonly APPDAEMON_CONFIG="/data/appdaemon/appdaemon.yaml"
+# appdaemon.yaml used to be in the configuration folder, and belong to users
+readonly USER_APPDAEMON_CONFIG="/config/appdaemon.yaml"
 readonly CONTROLLERX_SRC="/opt/controllerx"
+# Variables here are visible to AppDaemon, so the MQTT password can be read
+# with !env_var instead of being written into appdaemon.yaml.
+readonly CONTAINER_ENV="/run/s6/container_environment"
+readonly MQTT_PASSWORD_ENV="CONTROLLERX_MQTT_PASSWORD"
+
+# Location and time zone, AppDaemon requires them. Defaults to the ones of the
+# previous appdaemon.yaml, in case Home Assistant doesn't answer.
+latitude=0
+longitude=0
+elevation=0
+time_zone="${TZ:-UTC}"
 
 # ------------------------------------------------------------------------------
-# Creates the initial appdaemon.yaml, using the Home Assistant location and
-# time zone, since AppDaemon requires them.
+# Quotes a value as a YAML (JSON) string, so any character is safe.
 # ------------------------------------------------------------------------------
-create_appdaemon_config() {
+yaml_string() {
+    jq -n --arg value "${1}" '$value'
+}
+
+# ------------------------------------------------------------------------------
+# Whether a value is a number, so it can be written into YAML as is.
+# ------------------------------------------------------------------------------
+is_number() {
+    [[ "${1}" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]
+}
+
+# ------------------------------------------------------------------------------
+# Loads the location and time zone of a previous appdaemon.yaml, if any.
+# ------------------------------------------------------------------------------
+load_previous_location() {
+    local file="${1}"
+    local value
+
+    bashio::fs.file_exists "${file}" || return 0
+
+    value=$(yq '.appdaemon.latitude' "${file}") && is_number "${value}" \
+        && latitude="${value}"
+    value=$(yq '.appdaemon.longitude' "${file}") && is_number "${value}" \
+        && longitude="${value}"
+    value=$(yq '.appdaemon.elevation' "${file}") && is_number "${value}" \
+        && elevation="${value}"
+    value=$(yq '.appdaemon.time_zone // ""' "${file}") && [[ -n "${value}" ]] \
+        && time_zone="${value}"
+    return 0
+}
+
+# ------------------------------------------------------------------------------
+# Gets the location and time zone from Home Assistant.
+# ------------------------------------------------------------------------------
+load_ha_location() {
     local ha_config=""
-    local latitude=0
-    local longitude=0
-    local elevation=0
-    local time_zone="${TZ:-UTC}"
+    local value
     local -i waited=0
 
-    bashio::log.info "Creating initial AppDaemon configuration..."
-
-    while [[ ${waited} -lt 120 ]]; do
+    while [[ ${waited} -lt 60 ]]; do
         ha_config=$(\
             curl -sf -m 10 \
                 -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
@@ -38,53 +85,227 @@ create_appdaemon_config() {
         waited=$((waited + 5))
     done
 
-    if [[ -n "${ha_config}" ]]; then
-        latitude=$(jq -r '.latitude | numbers' <<< "${ha_config}") || latitude=0
-        longitude=$(jq -r '.longitude | numbers' <<< "${ha_config}") || longitude=0
-        elevation=$(jq -r '.elevation | numbers | round' <<< "${ha_config}") || elevation=0
-        time_zone=$(jq -r '.time_zone | strings' <<< "${ha_config}") || time_zone="${TZ:-UTC}"
-    else
+    if [[ -z "${ha_config}" ]]; then
         bashio::log.warning \
             "Could not get the location from Home Assistant," \
-            "please review ${CONFIG_DIR}/appdaemon.yaml"
+            "using the previous one"
+        return 0
     fi
 
-    cat > "${CONFIG_DIR}/appdaemon.yaml" <<EOF
+    value=$(jq -r '.latitude | numbers' <<< "${ha_config}") && [[ -n "${value}" ]] \
+        && latitude="${value}"
+    value=$(jq -r '.longitude | numbers' <<< "${ha_config}") && [[ -n "${value}" ]] \
+        && longitude="${value}"
+    value=$(jq -r '.elevation | numbers | round' <<< "${ha_config}") && [[ -n "${value}" ]] \
+        && elevation="${value}"
+    value=$(jq -r '.time_zone | strings' <<< "${ha_config}") && [[ -n "${value}" ]] \
+        && time_zone="${value}"
+    return 0
+}
+
+# ------------------------------------------------------------------------------
+# Moves the MQTT plugin of a user-made appdaemon.yaml to the app options.
+# ------------------------------------------------------------------------------
+migrate_mqtt_options() {
+    local file="${1}"
+    local plugin
+    local host
+    local port
+    local user
+    local password_tag
+    local password
+    local secrets_file
+
+    plugin=$(yq '
+        (.appdaemon.plugins // {}) | to_entries
+        | map(select(.value.type == "mqtt")) | .[0].key // ""
+    ' "${file}") || return 1
+    [[ -n "${plugin}" ]] || return 0
+
+    export PLUGIN="${plugin}"
+    host=$(yq '.appdaemon.plugins[strenv(PLUGIN)].client_host // ""' "${file}")
+    port=$(yq '.appdaemon.plugins[strenv(PLUGIN)].client_port // ""' "${file}")
+    user=$(yq '.appdaemon.plugins[strenv(PLUGIN)].client_user // ""' "${file}")
+    password=$(yq '.appdaemon.plugins[strenv(PLUGIN)].client_password // ""' "${file}")
+    password_tag=$(yq '.appdaemon.plugins[strenv(PLUGIN)].client_password | tag' "${file}")
+    unset PLUGIN
+
+    case "${password_tag}" in
+        '!secret')
+            secrets_file=$(yq ".secrets // \"${SECRETS_FILE}\"" "${file}")
+            if bashio::fs.file_exists "${secrets_file}"; then
+                password=$(SECRET="${password}" yq '.[strenv(SECRET)] // ""' "${secrets_file}")
+            else
+                password=""
+            fi
+            if [[ -z "${password}" ]]; then
+                bashio::log.warning \
+                    "Could not read the MQTT password from ${secrets_file}," \
+                    "set it in the app's Configuration tab"
+            fi
+            ;;
+        '!env_var')
+            password=""
+            bashio::log.warning \
+                "The MQTT password was an environment variable," \
+                "set it in the app's Configuration tab"
+            ;;
+    esac
+
+    bashio::log.info "Moving the MQTT plugin settings to the app options..."
+    bashio::app.option 'mqtt_enabled' '^true' || return 1
+    if [[ -n "${host}" ]]; then
+        bashio::app.option 'mqtt_host' "${host}" || return 1
+    fi
+    if [[ "${port}" =~ ^[0-9]+$ ]]; then
+        bashio::app.option 'mqtt_port' "^${port}" || return 1
+    fi
+    if [[ -n "${user}" ]]; then
+        bashio::app.option 'mqtt_username' "${user}" || return 1
+    fi
+    if [[ -n "${password}" ]]; then
+        bashio::app.option 'mqtt_password' "${password}" || return 1
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# appdaemon.yaml used to be in the configuration folder, and belong to users.
+# Keeps a copy of it and moves its MQTT settings, the only ones ControllerX
+# needed, to the app options.
+# ------------------------------------------------------------------------------
+migrate_user_config() {
+    local backup="${USER_APPDAEMON_CONFIG}.bak"
+
+    bashio::fs.file_exists "${USER_APPDAEMON_CONFIG}" || return 0
+
+    bashio::log.warning \
+        "The app now manages the AppDaemon configuration itself," \
+        "${USER_APPDAEMON_CONFIG} isn't used anymore and is kept as ${backup}." \
+        "Use the app's Configuration tab to change the settings."
+
+    load_previous_location "${USER_APPDAEMON_CONFIG}"
+    migrate_mqtt_options "${USER_APPDAEMON_CONFIG}" \
+        || bashio::log.warning \
+            "Could not move the MQTT settings to the app options," \
+            "set them in the app's Configuration tab"
+
+    mv -f "${USER_APPDAEMON_CONFIG}" "${backup}" \
+        || bashio::exit.nok "Failed to back up ${USER_APPDAEMON_CONFIG}"
+}
+
+# ------------------------------------------------------------------------------
+# Prints the MQTT plugin configuration, if enabled in the app options. Uses the
+# Mosquitto broker app when no host is set.
+# ------------------------------------------------------------------------------
+mqtt_plugin_config() {
+    local host=""
+    local port=""
+    local username=""
+    local password=""
+
+    rm -f "${CONTAINER_ENV}/${MQTT_PASSWORD_ENV}"
+
+    bashio::config.true 'mqtt_enabled' || return 0
+
+    if bashio::config.has_value 'mqtt_host'; then
+        host=$(bashio::config 'mqtt_host')
+    elif bashio::services.available 'mqtt'; then
+        bashio::log.info "Using the MQTT broker from Home Assistant"
+        host=$(bashio::services 'mqtt' 'host')
+        port=$(bashio::services 'mqtt' 'port')
+        username=$(bashio::services 'mqtt' 'username')
+        password=$(bashio::services 'mqtt' 'password')
+    else
+        bashio::log.error \
+            "MQTT is enabled, but there's no MQTT host set" \
+            "and no Mosquitto broker app to use instead." \
+            "Set the MQTT host in the app's Configuration tab."
+        return 0
+    fi
+
+    bashio::config.has_value 'mqtt_port' && port=$(bashio::config 'mqtt_port')
+    bashio::config.has_value 'mqtt_username' && username=$(bashio::config 'mqtt_username')
+    bashio::config.has_value 'mqtt_password' && password=$(bashio::config 'mqtt_password')
+
+    cat <<EOF
+    MQTT:
+      type: mqtt
+      namespace: mqtt
+      # Unique, so it doesn't clash with the AppDaemon app on the same broker
+      client_id: controllerx
+      client_host: $(yaml_string "${host}")
+      client_port: ${port:-1883}
+EOF
+    if [[ -n "${username}" ]]; then
+        echo "      client_user: $(yaml_string "${username}")"
+    fi
+    if [[ -n "${password}" ]]; then
+        printf '%s' "${password}" > "${CONTAINER_ENV}/${MQTT_PASSWORD_ENV}" \
+            || bashio::exit.nok "Failed to store the MQTT password"
+        chmod 600 "${CONTAINER_ENV}/${MQTT_PASSWORD_ENV}"
+        echo "      client_password: !env_var ${MQTT_PASSWORD_ENV}"
+    fi
+    # ControllerX subscribes to the topics of its controllers. Without this,
+    # AppDaemon subscribes to "#" and receives every message in the broker.
+    if grep -qF "def listen_mqtt_topic" \
+        "${CONTROLLERX_SRC}/cx_core/integration/__init__.py"; then
+        echo "      client_topics: NONE"
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Writes appdaemon.yaml.
+# ------------------------------------------------------------------------------
+create_appdaemon_config() {
+    local mqtt_config
+    local production_mode=false
+
+    mqtt_config=$(mqtt_plugin_config) || return 1
+    if bashio::config.true 'production_mode'; then
+        production_mode=true
+    fi
+
+    mkdir -p "${APPDAEMON_DIR}" || return 1
+    cat > "${APPDAEMON_CONFIG}.tmp" <<EOF
+# Generated by the ControllerX app on every start
 ---
-# AppDaemon configuration for the ControllerX app.
-# Restart the app after changing this file.
-# Documentation: https://appdaemon.readthedocs.io/en/latest/CONFIGURE.html
+secrets: ${SECRETS_FILE}
 appdaemon:
+  app_dir: ${APPS_DIR}
   latitude: ${latitude:-0}
   longitude: ${longitude:-0}
   elevation: ${elevation:-0}
-  time_zone: "${time_zone:-UTC}"
+  time_zone: $(yaml_string "${time_zone:-UTC}")
+  # ControllerX callbacks are all async, they run in the event loop. Without
+  # this, AppDaemon starts an idle worker thread for every controller.
+  total_threads: 0
+  pin_apps: false
+  uvloop: true
+  # The ControllerX modules aren't apps
+  missing_app_warnings: false
+  # When true, AppDaemon stops checking the apps folder for changes every
+  # second, and changes to apps.yaml need an app restart.
+  production_mode: ${production_mode}
   plugins:
     HASS:
       type: hass
       token: !env_var SUPERVISOR_TOKEN
-    # Needed for the z2m integration with "listen_to: mqtt", see
-    # https://xaviml.github.io/controllerx/others/enable-mqtt-plugin
-    # Store the password in secrets.yaml, next to this file. Keep client_id
-    # unique, so it doesn't clash with another AppDaemon on the same broker.
-    # MQTT:
-    #   type: mqtt
-    #   namespace: mqtt
-    #   client_id: controllerx
-    #   client_host: core-mosquitto
-    #   client_user: <user>
-    #   client_password: !secret mqtt_password
-http:
-  url: http://0.0.0.0:5050
-admin:
-api:
+${mqtt_config}
+# No admin, api or hadashboard: ControllerX doesn't need the web interface,
+# and without them AppDaemon doesn't start its web server.
 EOF
+    mv -f "${APPDAEMON_CONFIG}.tmp" "${APPDAEMON_CONFIG}"
 }
 
-if ! bashio::fs.file_exists "${CONFIG_DIR}/appdaemon.yaml"; then
-    create_appdaemon_config \
-        || bashio::exit.nok "Failed to create initial AppDaemon configuration"
-fi
+load_previous_location "${APPDAEMON_CONFIG}"
+migrate_user_config
+load_ha_location
+bashio::log.info "Creating AppDaemon configuration..."
+create_appdaemon_config \
+    || bashio::exit.nok "Failed to create AppDaemon configuration"
+# Users can't see the file, so it's shown in the log for troubleshooting.
+# It has no passwords, the MQTT one is passed as an environment variable.
+bashio::log.debug "AppDaemon configuration:\n$(< "${APPDAEMON_CONFIG}")"
 
 mkdir -p "${APPS_DIR}" \
     || bashio::exit.nok "Failed to create ${APPS_DIR}"

@@ -1,0 +1,15 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Home Assistant App: ControllerX
+# Replaces init-appdaemon of the community AppDaemon base image. The app
+# generates appdaemon.yaml itself (see init-controllerx), so the base image's
+# configuration fixes (e.g. adding the web interface address back) don't
+# apply. Only the Python packages from the options are installed.
+# ==============================================================================
+if bashio::config.has_value 'python_packages'; then
+    for package in $(bashio::config 'python_packages'); do
+        uv pip install --python /opt/appdaemon/bin/python "$package" \
+            || bashio::exit.nok "Failed installing package ${package}"
+    done
+fi

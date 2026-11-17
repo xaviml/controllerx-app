@@ -23,8 +23,7 @@ with the Studio Code Server or Samba apps, under
 
 ```text
 /addon_configs/<id>_controllerx/
-├── appdaemon.yaml      AppDaemon configuration (yours)
-├── secrets.yaml        Optional secrets for appdaemon.yaml and apps (yours)
+├── secrets.yaml        Optional secrets for your apps (yours)
 └── apps/
     ├── apps.yaml       Your ControllerX apps (yours)
     ├── *.yaml          Optionally, more files with apps (yours)
@@ -38,39 +37,24 @@ This is where you define your controllers, following the
 The app creates it with a commented example on first start and never changes
 it afterwards. You can split your apps into several YAML files inside `apps/`.
 
-AppDaemon picks up changes to these files on its own, no restart is needed.
+AppDaemon picks up changes to these files on its own, no restart is needed,
+unless [`production_mode`](#option-production_mode) is on.
 
-### `appdaemon.yaml`
+### AppDaemon configuration
 
-The app creates it on first start, with the location and time zone of your
-Home Assistant and a connection to Home Assistant already set up. After that,
-it's yours to change; restart the app to apply changes. On every start, the app
-only makes sure the Home Assistant token and the web interface address are set.
+There's no `appdaemon.yaml` to edit: the app generates the AppDaemon
+configuration on every start, from the app options below and the location and
+time zone of your Home Assistant, and keeps it in its private storage.
 
-To use the z2m integration with `listen_to: mqtt`, enable the MQTT plugin as
-explained in [Enable MQTT plugin](https://xaviml.github.io/controllerx/others/enable-mqtt-plugin).
-With the Mosquitto broker app, use `core-mosquitto` as `client_host`, and keep
-the password in `secrets.yaml`. Set a `client_id` that no other MQTT client
-uses: without it, AppDaemon uses `appdaemon_mqtt_client`, the same as the
-AppDaemon app, and the broker keeps disconnecting one of the two.
+It only has what ControllerX needs, so AppDaemon uses as few resources as
+possible: no web interface, no worker threads (ControllerX runs everything
+in AppDaemon's event loop) and, with MQTT, only the topics of your
+controllers. To see it, set `log_level` to `debug` and restart the app: it's
+printed at the beginning of the log.
 
-```yaml
-# appdaemon.yaml
-appdaemon:
-  plugins:
-    MQTT:
-      type: mqtt
-      namespace: mqtt
-      client_id: controllerx
-      client_host: core-mosquitto
-      client_user: my_user
-      client_password: !secret mqtt_password
-```
-
-```yaml
-# secrets.yaml
-mqtt_password: my_password
-```
+If you had an `appdaemon.yaml` from an earlier version of the app, the app
+moves its MQTT plugin settings to the app options and keeps the file as
+`appdaemon.yaml.bak`, which you can delete.
 
 ### `apps/controllerx/`
 
@@ -83,6 +67,12 @@ update the app.
 ```yaml
 log_level: info
 python_packages: []
+production_mode: false
+mqtt_enabled: false
+mqtt_host: 192.168.1.10
+mqtt_port: 1883
+mqtt_username: my_user
+mqtt_password: my_password
 ```
 
 ### Option: `log_level`
@@ -92,15 +82,33 @@ How verbose the AppDaemon logs are: `trace`, `debug`, `info`, `notice`,
 
 ### Option: `python_packages`
 
-Extra Python packages to install into AppDaemon on every start, for example
-for your own apps. ControllerX itself doesn't need any.
+Extra Python packages to install into AppDaemon on every start. ControllerX
+itself doesn't need any.
 
-## Web interface
+### Option: `production_mode`
 
-The AppDaemon web interface isn't needed for ControllerX, so its port (5050)
-is disabled by default. To use it, set a port in the app's **Network**
-settings. If you also run the AppDaemon app, pick a different port than it,
-for example 5051.
+By default, AppDaemon checks the `apps` folder every second, so changes to
+`apps.yaml` are applied right away. Once your configuration is stable, turn
+this on to stop those checks and save some resources. Changes to `apps.yaml`
+then need an app restart to apply. Defaults to `false`.
+
+### Option: `mqtt_enabled`
+
+Connects AppDaemon to an MQTT broker. It's needed by the `mqtt` and `tasmota`
+integrations, the `z2m` integration with `listen_to: mqtt` and
+`Z2MLightController` with `mode: mqtt`. See
+[Enable MQTT plugin](https://xaviml.github.io/controllerx/others/enable-mqtt-plugin).
+
+If you use the Mosquitto broker app, turning this on is enough: the app gets
+the broker address and credentials from Home Assistant.
+
+### Options: `mqtt_host`, `mqtt_port`, `mqtt_username` and `mqtt_password`
+
+The MQTT broker to connect to, for brokers other than the Mosquitto broker
+app. `mqtt_host` goes without the port, which defaults to 1883.
+
+The app connects with `controllerx` as its client ID, so it doesn't clash
+with the AppDaemon app on the same broker.
 
 ## Using it together with the AppDaemon app
 
@@ -112,8 +120,8 @@ example, a toggle that turns the light on and off again).
 To move ControllerX from the AppDaemon app to this app:
 
 1. Copy your ControllerX apps from the AppDaemon app's `apps.yaml` into this
-   app's `apps/apps.yaml`. If you use the MQTT plugin, copy its configuration
-   from `appdaemon.yaml` as well.
+   app's `apps/apps.yaml`. If you use the MQTT plugin, turn on
+   `mqtt_enabled` in this app's options.
 2. Remove those apps and the `apps/controllerx/` folder from the AppDaemon
    app, and restart it.
 3. Start (or restart) this app.
