@@ -1,5 +1,7 @@
 # Home Assistant App: ControllerX
 
+[![ControllerX total downloads](https://img.shields.io/github/downloads/xaviml/controllerx/controllerx.zip?style=for-the-badge&label=total%20downloads&logo=github&color=18BCF2&displayAssetName=false)](https://github.com/xaviml/controllerx/releases)
+
 [ControllerX](https://xaviml.github.io/controllerx/) lets you create
 controller-based automations for your lights, media players, covers and
 switches with a few lines of YAML.

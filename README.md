@@ -5,6 +5,7 @@ Home Assistant app repository with a single app, **ControllerX**: an
 [ControllerX](https://xaviml.github.io/controllerx/) preinstalled.
 
 [![Add repository to Home Assistant][repository-badge]][repository-url]
+[![ControllerX total downloads][downloads-badge]][downloads-url]
 
 This is an extra installation method. You can still install ControllerX
 manually into the AppDaemon app, as explained in the
@@ -70,3 +71,5 @@ is no need to commit.
 
 [repository-badge]: https://img.shields.io/badge/Add%20repository%20to%20my-Home%20Assistant-41BDF5?logo=home-assistant&style=for-the-badge
 [repository-url]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fxaviml%2Fcontrollerx-app
+[downloads-badge]: https://img.shields.io/github/downloads/xaviml/controllerx/controllerx.zip?style=for-the-badge&label=total%20downloads&logo=github&color=18BCF2&displayAssetName=false
+[downloads-url]: https://github.com/xaviml/controllerx/releases
