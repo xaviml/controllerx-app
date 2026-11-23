@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.3.1-1
+
+- Update ControllerX to [v5.3.1](https://github.com/xaviml/controllerx/releases/tag/v5.3.1).
+
 ## 5.3.0-1
 
 - Add mqtt_client_id optional argument

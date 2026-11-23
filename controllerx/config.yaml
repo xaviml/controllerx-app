@@ -3,7 +3,7 @@ name: ControllerX
 # X.Y.Z-N: X.Y.Z is the bundled ControllerX version, N the app build (1-9).
 # Never a plain X.Y.Z, see "Versioning" in README.md. Set by the release
 # workflows.
-version: 5.3.0-1
+version: 5.3.1-1
 slug: controllerx
 description: >-
   Controller-based automations for your home devices, running on its own
