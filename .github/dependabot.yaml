@@ -9,6 +9,13 @@ updates:
       interval: weekly
     commit-message:
       prefix: chore(deps)
+  # AwesomeVersion for the version check, to follow the one Home Assistant uses
+  - package-ecosystem: pip
+    directory: /.github/scripts
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
   # Keeps the actions used by the workflows (e.g. home-assistant/builder)
   # up to date.
   - package-ecosystem: github-actions

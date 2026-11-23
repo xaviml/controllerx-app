@@ -3,8 +3,12 @@
 # Prepares a release of the ControllerX app: updates the version, the
 # ControllerX checksum, the image and the changelog. It doesn't commit.
 #
-#   release.sh controllerx vX.Y.Z        Bundle a ControllerX release
-#   release.sh app "<changelog entry>"   Release app-only changes as X.Y.Z-N
+#   release.sh controllerx vX.Y.Z        Bundle a ControllerX release as X.Y.Z-1
+#   release.sh app "<changelog entry>"   Release app-only changes as X.Y.Z-(N+1)
+#
+# App versions are always X.Y.Z-N, never a plain X.Y.Z: Home Assistant
+# compares them as SemVer, where X.Y.Z-N is a pre-release of X.Y.Z, so a
+# plain X.Y.Z followed by X.Y.Z-N would look like a downgrade. See README.md.
 #
 # Writes "release" (true/false) and "version" to $GITHUB_OUTPUT.
 # ==============================================================================
@@ -99,7 +103,7 @@ release_controllerx() {
         grep -qF "ARG CONTROLLERX_SHA256=\"${sha256}\"" "${DOCKERFILE}" \
             || fail "The checksum in ${DOCKERFILE} doesn't match the ${tag} release"
     else
-        new_version="${version}"
+        new_version="${version}-1"
         set_version "${new_version}"
         sed -i "s/^ARG CONTROLLERX_SHA256=.*/ARG CONTROLLERX_SHA256=\"${sha256}\"/" \
             "${DOCKERFILE}"
@@ -126,6 +130,7 @@ release_app() {
         fail "Nothing changed in ${APP_DIR}/ since ${last_tag}"
     fi
 
+    # Versions released before X.Y.Z-N was the rule have no "-N", count them as 0
     if [[ "${current_version}" == *-* ]]; then
         revision="${current_version##*-}"
     fi

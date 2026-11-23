@@ -4,7 +4,7 @@ FROM ghcr.io/hassio-addons/appdaemon:0.19.3
 # Set shell
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# App version, "<ControllerX version>[-<app-only release>]"
+# App version, "<ControllerX version>-<app build>", see README.md
 ARG BUILD_VERSION
 ARG BUILD_ARCH
 # Checksum of controllerx.zip for the ControllerX version above

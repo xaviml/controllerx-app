@@ -20,22 +20,70 @@ Releases are made by GitHub Actions. Don't change `version` in
 by hand.
 
 - **New ControllerX version:** each ControllerX release triggers the
-  **Release ControllerX** workflow. It sets the app version to the ControllerX
-  version and pins the checksum from the release's `controllerx.zip.sha256`.
-  To run it by hand, start it from the Actions tab with the release tag, like
-  `v5.2.4`. Running it again for a released version does nothing.
+  **Release ControllerX** workflow. It releases the app as `X.Y.Z-1`, where
+  `X.Y.Z` is the ControllerX version, and pins the checksum from the release's
+  `controllerx.zip.sha256`. To run it by hand, start it from the Actions tab
+  with the release tag, like `v5.3.1`. Running it again for a released version
+  does nothing.
 - **Changes to the app only** (for example, a new base image): after merging
   them, run the **Release app** workflow from the Actions tab with a changelog
-  entry. It releases `5.2.3-1`, then `5.2.3-2`, and so on, so Home Assistant
+  entry. It releases `5.3.1-2`, then `5.3.1-3`, and so on, so Home Assistant
   offers the update. Dependabot checks weekly for a new AppDaemon base
   image and opens a PR for it.
 
-Both workflows add the changelog entry, then build and push the amd64 and
-aarch64 images to `ghcr.io/xaviml/controllerx-app/<arch>`. Only then do they
-update `main` and tag the release, so users never see a version whose images
-don't exist yet.
+Both workflows add the changelog entry and check the new version (see below),
+then build and push the amd64 and aarch64 images to
+`ghcr.io/xaviml/controllerx-app/<arch>`, tagged with the version and `latest`.
+Only then do they update `main` and tag the release, so users never see a
+version whose images don't exist yet.
 
-Pull requests only build the images.
+Pull requests build the images and check the version.
+
+### Versioning
+
+The app version is always `X.Y.Z-N`:
+
+- `X.Y.Z` is the ControllerX version the app installs. The Dockerfile
+  downloads the ControllerX release named by the part before the `-`.
+- `N` is the app build for that ControllerX version. It starts at `1` with
+  each ControllerX release and goes up with each app-only release.
+
+For example: `5.3.1-1` → `5.3.1-2` → `5.4.0-1`. A plain `X.Y.Z` is never
+released.
+
+The reason is how Home Assistant compares versions. The Supervisor reports an
+update whenever the version changes, but the update entity, which shows the
+Install button, uses [AwesomeVersion](https://github.com/ludeeus/awesomeversion)
+with SemVer rules. For SemVer, `-N` marks a pre-release, so `5.3.0-1` is
+*older* than `5.3.0`. When `5.3.0` was followed by `5.3.0-1`, Home Assistant
+listed the update but couldn't install it, and the only way out was a new
+ControllerX version (`5.3.1-1`). Always using `-N` keeps every release newer
+than the one before (Zigbee2MQTT's app does the same).
+
+`N` must stay between `1` and `9`: AwesomeVersion only compares the suffix as
+a number when it's a single digit, so it doesn't see `5.3.1-10` as newer than
+`5.3.1-9`. If a ControllerX version would need a tenth app build, release a
+ControllerX patch version instead.
+
+The **Version** workflow runs
+[`.github/scripts/check_version.py`](.github/scripts/check_version.py) on pull
+requests and on `main`, and the release workflows run it before releasing. It
+fails if:
+
+- The version isn't `X.Y.Z-N` with `N` from 1 to 9.
+- The `controllerx.zip` of ControllerX `vX.Y.Z` doesn't match
+  `CONTROLLERX_SHA256` in the Dockerfile, or isn't ControllerX `vX.Y.Z`.
+- AwesomeVersion doesn't see the version as greater than every released
+  version (the `v*` tags). On pull requests, an already released version is
+  fine.
+
+To run it locally:
+
+```shell
+pip install -r .github/scripts/requirements.txt
+python -m unittest discover -s .github/scripts
+python .github/scripts/check_version.py
+```
 
 ## Testing locally
 

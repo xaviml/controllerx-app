@@ -39,6 +39,15 @@ jobs:
         env:
           CONTROLLERX_VERSION: ${{ github.event.client_payload.version || inputs.version }}
         run: .github/scripts/release.sh controllerx "${CONTROLLERX_VERSION}"
+      - uses: actions/setup-python@v7
+        if: steps.release.outputs.release == 'true'
+        with:
+          python-version: "3.13"
+      - name: Check version
+        if: steps.release.outputs.release == 'true'
+        run: |
+          pip install -r .github/scripts/requirements.txt
+          python .github/scripts/check_version.py --release
       - name: Push release branch
         if: steps.release.outputs.release == 'true'
         env:

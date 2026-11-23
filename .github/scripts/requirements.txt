@@ -1,0 +1,2 @@
+# For check_version.py. Keep it close to the version Home Assistant uses.
+awesomeversion==25.8.0

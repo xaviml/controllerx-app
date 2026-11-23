@@ -37,6 +37,13 @@ jobs:
         env:
           CHANGELOG_ENTRY: ${{ inputs.changelog }}
         run: .github/scripts/release.sh app "${CHANGELOG_ENTRY}"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Check version
+        run: |
+          pip install -r .github/scripts/requirements.txt
+          python .github/scripts/check_version.py --release
       - name: Push release branch
         env:
           VERSION: ${{ steps.release.outputs.version }}
