@@ -34,3 +34,8 @@ configuration:
   mqtt_password:
     name: MQTT password
     description: Password to connect to the MQTT broker.
+  mqtt_client_id:
+    name: MQTT client ID
+    description: >-
+      Client ID to connect to the MQTT broker with. It must be unique on the
+      broker. Leave it empty to use the one generated for this install.

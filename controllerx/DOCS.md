@@ -75,6 +75,7 @@ mqtt_host: 192.168.1.10
 mqtt_port: 1883
 mqtt_username: my_user
 mqtt_password: my_password
+mqtt_client_id: controllerx_living_room
 ```
 
 ### Option: `log_level`
@@ -109,8 +110,17 @@ the broker address and credentials from Home Assistant.
 The MQTT broker to connect to, for brokers other than the Mosquitto broker
 app. `mqtt_host` goes without the port, which defaults to 1883.
 
-The app connects with `controllerx` as its client ID, so it doesn't clash
-with the AppDaemon app on the same broker.
+### Option: `mqtt_client_id`
+
+The client ID the app connects to the MQTT broker with. The broker disconnects
+a client when another one connects with the same ID, so it must be unique on
+the broker.
+
+Leave it empty and the app generates one on its first start, such as
+`controllerx_1a2b3c4d`, and keeps it. Each install gets a different one, so
+several installs of this app (for example, in two Home Assistant instances)
+and the AppDaemon app can use the same broker. Set it only if your broker
+needs a known client ID, for example for its access rules.
 
 ## Using it together with the AppDaemon app
 

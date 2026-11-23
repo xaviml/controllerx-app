@@ -21,6 +21,8 @@ readonly CONTROLLERX_SRC="/opt/controllerx"
 # with !env_var instead of being written into appdaemon.yaml.
 readonly CONTAINER_ENV="/run/s6/container_environment"
 readonly MQTT_PASSWORD_ENV="CONTROLLERX_MQTT_PASSWORD"
+# Client ID generated on the first start, kept so it doesn't change on restarts
+readonly MQTT_CLIENT_ID_FILE="/data/mqtt_client_id"
 
 # Location and time zone, AppDaemon requires them. Defaults to the ones of the
 # previous appdaemon.yaml, in case Home Assistant doesn't answer.
@@ -194,6 +196,32 @@ migrate_user_config() {
 }
 
 # ------------------------------------------------------------------------------
+# Prints the MQTT client ID: the one in the app options, or else one generated
+# for this install. The broker disconnects a client when another one connects
+# with the same ID, so a fixed ID would make two installs of this app on the
+# same broker keep disconnecting each other.
+# ------------------------------------------------------------------------------
+mqtt_client_id() {
+    local client_id=""
+
+    if bashio::config.has_value 'mqtt_client_id'; then
+        bashio::config 'mqtt_client_id'
+        return 0
+    fi
+
+    if [[ -s "${MQTT_CLIENT_ID_FILE}" ]]; then
+        client_id=$(< "${MQTT_CLIENT_ID_FILE}")
+    fi
+    if [[ -z "${client_id}" ]]; then
+        # 20 characters, within the 23 that MQTT 3.1 brokers must accept
+        client_id="controllerx_$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
+        printf '%s\n' "${client_id}" > "${MQTT_CLIENT_ID_FILE}" || return 1
+        bashio::log.info "Generated MQTT client ID ${client_id}"
+    fi
+    printf '%s' "${client_id}"
+}
+
+# ------------------------------------------------------------------------------
 # Prints the MQTT plugin configuration, if enabled in the app options. Uses the
 # Mosquitto broker app when no host is set.
 # ------------------------------------------------------------------------------
@@ -202,10 +230,14 @@ mqtt_plugin_config() {
     local port=""
     local username=""
     local password=""
+    local client_id
 
     rm -f "${CONTAINER_ENV}/${MQTT_PASSWORD_ENV}"
 
     bashio::config.true 'mqtt_enabled' || return 0
+
+    client_id=$(mqtt_client_id) \
+        || bashio::exit.nok "Failed to store the MQTT client ID"
 
     if bashio::config.has_value 'mqtt_host'; then
         host=$(bashio::config 'mqtt_host')
@@ -231,8 +263,10 @@ mqtt_plugin_config() {
     MQTT:
       type: mqtt
       namespace: mqtt
-      # Unique, so it doesn't clash with the AppDaemon app on the same broker
-      client_id: controllerx
+      # Unique per install, so it doesn't clash with the AppDaemon app or other
+      # installs of this app on the same broker. AppDaemon also uses it for
+      # its status topic (<client_id>/status).
+      client_id: $(yaml_string "${client_id}")
       client_host: $(yaml_string "${host}")
       client_port: ${port:-1883}
 EOF

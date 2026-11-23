@@ -32,3 +32,4 @@ schema:
   mqtt_port: port?
   mqtt_username: str?
   mqtt_password: password?
+  mqtt_client_id: str?
